@@ -57,7 +57,9 @@ createUser() {
     while [ $check -eq 0 ]
     do
         tmpCount=1
-        if [ getent passwd $newUsername > /dev/null 2>&1 ]
+        isUserExist=$(getent passwd $newUsername)
+        checkLen=${#isUserExist}
+        if [ $checkLen -ne 0 ]
         then
             checkName=$(cat /etc/passwd | grep $newUsername | awk -F: '{print $5}' | awk -F, {'print $1}')
             checkLastname=$(cat /etc/passwd | grep $newUsername | awk -F: '{print $5}' | awk -F, {'print $2}')
@@ -78,7 +80,6 @@ createUser() {
         echo "  User name = $newUsername"
 
         grp_length=${#groups}
-        echo $grp_length
         if [ $grp_length -le 2 ]
         then
             echo "      No valid groups detected"
@@ -86,21 +87,39 @@ createUser() {
             sudo useradd -c "$name,$lastname,," -f 0 -m -s /bin/bash -U $newUsername
         else
             grpCount=0
+            createWithPrimary=1
             echo "      Creation of groups"
 
+            isPrimaryGroupIncluded=$(echo "$groups" | grep $newUsername)
+            isPrimaryGroupIncluded=${#isPrimaryGroupIncluded}
+            if [ $isPrimaryGroupIncluded -eq 0 ]
+            then
+                echo "No primary group declared"
+                echo "Do you want to create the user with primary group $newUsername ??"
+                echo "Y / N (or enter)"
+                read createGroupChoice
+                if [[ $createGroupChoice == [Yy] ]]
+                then
+                    echo "       Creating the user with the primary group $newUsername"
+                    sudo useradd -c "$name,$lastname,," -f 0 -m -s /bin/bash $newUsername
+                    createWithPrimary=0
+                fi
+            fi
+
             # On split chaque groupe sur une ligne
-            $groupsArray=$(echo $groups | tr "," "\n")
+            groupsArray=$(echo "$groups" | tr "," "\n")
             for grp in $groupsArray
             do
-                echo "          - $grp"
-                if [ $(getent group $grp) ]; then
-                    echo "              (Existing group)"
+                echo "       - $grp"
+                isGroupExist=$(getent group $grp)
+                if [ ${#isGroupExist} -ne 0 ]; then
+                    echo "       (Existing group)"
                 else
                     sudo groupadd $grp
                 fi
 
                 # Si c'est le premier groupe, alors c'est le primaire, dans ce cas on crée l'utilisateur avec ce groupe
-                if [ $grpCount -eq 0 ]; then
+                if [[ $grpCount -eq 0 && $createWithPrimary -eq 1 ]]; then
                     sudo useradd -c "$name,$lastname,," -f 0 -m -s /bin/bash -g $grp $newUsername
                 else
                     usermod -aG $grp $newUsername
@@ -115,24 +134,37 @@ createUser() {
             sudo usermod -aG sudo $newUsername  # Ajout de l'utilisateur au sein des sudoers
         fi
 
-        generateFiles $newUsername
+        #generateFiles $newUsername
+        return 1
     else
         echo "  User already exists"
+        return 0
     fi
 }
 
 checkUserFormat () {
     local status=1
+
+    # Permet de ne pas compter les lignes mises en commentaire
+    isCommentary=${1:0:1}
+    if [ $isCommentary == "#" ]; then
+        status=3
+        return $status
+    fi
+
     # Regex qui permet de vérifier le format de la ligne
-    userRegexFormat='[a-zA-Z]+:[a-zA-Z]+:[a-zA-Z0-9_,:]+(oui|non):[a-zA-Z0-9]+'
+    userRegexFormat='^[a-zA-Z]+:[a-zA-Z]+:[a-zA-Z0-9_,:]+(oui|non):[a-zA-Z0-9]+'
     echo "  Treatment of $1"
+
     if [[ $1 =~ $userRegexFormat ]]
     then
         # Appel de la fonction de création
         echo "  Correct format, user creation"
         createUser "$line"
+        status=$?
         echo "  End of suboperation completed"
     else
+        # Format de la ligne incorrect
         echo "  Incorrect line format, see -f option for format"
         echo "  User creation canceled"
         status=0
@@ -148,14 +180,21 @@ success=0
 
 if [[ -r $filename && -f $filename ]]
 then
-    while IFS= read -r line 
+    old_IFS=$IFS
+    IFS=$'\n'
+    for line in $(cat $filename)
     do
         # On parcourt chaque ligne du fichier
-        ((count=count+1))
         checkUserFormat "$line"
         tmp=$?
-        ((success=success+tmp))
-    done < "$filename"
+        if [ $tmp -ne 3 ]
+        then
+            # Si le statut de retour est différent de 3, c'est une tentative de création d'utilisateur qui a eu lieu
+            ((count=count+1))
+            ((success=success+tmp))
+        fi
+    done
+    IFS=$old_IFS
 else
     echo "File does not exist or can't be read"
     exit

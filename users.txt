@@ -1,4 +1,4 @@
-john:doe:john,groupe1:oui:johnazerty
+john:doe:john,cdrom:oui:johnazerty
 azeazkeaej
 jean:cazeza::nop:azeazek
-jean:coco::non:azeazek
+jean:coco::non:jeanmdp

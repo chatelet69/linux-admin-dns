@@ -18,6 +18,13 @@ then
     exit
 fi
 
+# Vérifie l'UID de l'utilisateur pour voir s'il est en tant que root ou non
+if [ $EUID -ne 0 ]
+then
+    echo "You need to run the script with sudo right (or as root)"
+    exit 1
+fi
+
 if [[ $1 == "-f" || $2 == "-f" ]]
 then
     echo "Format : name:lastname:group1,group2:sudo:password"
@@ -43,6 +50,15 @@ generateFiles () {
     else
         echo "      User directory not found, no files generated"
     fi
+}
+
+createUserWithPrimary() {
+    local name=$1
+    local lastname=$2
+    local username=$3
+    #local password=$4
+    #sudo useradd -c "$name,$lastname,," -f 0 -m -s /bin/bash -p "$password" -U $username
+    sudo useradd -c "$name,$lastname,," -f 0 -m -s /bin/bash -U $username
 }
 
 createUser() {
@@ -84,7 +100,7 @@ createUser() {
         then
             echo "      No valid groups detected"
             echo "      Creating a Default Primary Group"
-            sudo useradd -c "$name,$lastname,," -f 0 -m -s /bin/bash -U $newUsername
+            createUserWithPrimary $name $lastname $newUsername $password
         else
             grpCount=0
             createWithPrimary=1
@@ -101,7 +117,7 @@ createUser() {
                 if [[ $createGroupChoice == [Yy] ]]
                 then
                     echo "       Creating the user with the primary group $newUsername"
-                    sudo useradd -c "$name,$lastname,," -f 0 -m -s /bin/bash $newUsername
+                    createUserWithPrimary $name $lastname $newUsername $password
                     createWithPrimary=0
                 fi
             fi
@@ -127,6 +143,8 @@ createUser() {
             done
         fi
 
+        password=$(echo "$password" | tr -d '\n')
+        password=$(echo "$password" | tr -d '\r')
         echo "$newUsername:$password" | sudo chpasswd
         # Permet de faire expirer le mot de passe de l'utilisateur
         sudo passwd --expire $newUsername

@@ -152,7 +152,7 @@ createUser() {
             sudo usermod -aG sudo $newUsername  # Ajout de l'utilisateur au sein des sudoers
         fi
 
-        #generateFiles $newUsername
+        generateFiles $newUsername
         return 1
     else
         echo "  User already exists"

@@ -1,9 +1,9 @@
 #!/bin/bash
     declare -a tabUsers
-    if [ $1 == "-g" ]; then
-        if [ $2 != "" ]; then
+    if [[ $1 == "-g" ]]; then
+        if [[ $2 != "" ]]; then
             secondarySchr=$2
-            else echo "Erreur, argument manquant";
+        else echo "Erreur, argument manquant";
             exit
         fi
     fi
